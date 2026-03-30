@@ -2,13 +2,19 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>GeoSpatialNusantaraEkstern</title>
+<title>GeoSpatialNusantaraIntern</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <style>
 body{margin:0;font-family:Arial}
 #map{height:100vh;width:100%}
-
+    
+.leaflet-popup-content table {
+    font-size:12px;
+}
+.leaflet-popup-content td {
+    word-break: break-word;
+}
 /* ================= SIDEBAR ================= */
 #sidebar{
 position:fixed;
@@ -227,14 +233,6 @@ if(layer){
         });
     }
 }
-
-                // aktifkan toggle tahun otomatis
-                document.querySelectorAll(".toggle").forEach(t=>{
-                    if(!t.classList.contains("active")){
-                        t.click();
-                    }
-                });
-
                 searchResult.innerHTML="";
                 searchInput.value="";
             };
@@ -249,7 +247,17 @@ const url=`https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${
 const res=await fetch(url);
 return await res.json();
 }
-
+    
+async function fetchTXT(key){
+const txtPath = key.replace(/\.(zip|kml|kmz)$/i,".txt");
+const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${txtPath}`;
+try{
+const res=await fetch(url);
+if(!res.ok) return null;
+return await res.text();
+}catch{return null;}
+}
+    
 async function loadStructure(){
 const container=document.getElementById("layerList");
 const cats=await fetchGitHub(ROOT);
@@ -431,9 +439,97 @@ marker.on("popupopen", function () {
     layerStore[key].marker = marker;
 
 }
-  
-async function loadLayer(key){
 
+function createOffsetMarker(layer, key, txtData){
+
+    const bounds = layer.getBounds();
+    if(!bounds || !bounds.isValid()) return;
+
+    const center = bounds.getCenter();
+
+    // 🔥 Geser ±10 km (≈0.09 derajat)
+    const offsetLat = center.lat + (Math.random() * 0.18 - 0.09);
+    const offsetLng = center.lng + (Math.random() * 0.18 - 0.09);
+
+    const icon = L.icon({
+        iconUrl: markerImage,
+        iconSize: [32,32],
+        iconAnchor: [16,32]
+    });
+
+    const marker = L.marker([offsetLat, offsetLng], {icon}).addTo(map);
+
+    // ambil atribut dari salah satu feature
+    let props = null;
+    layer.eachLayer(l=>{
+        if(!props && l.feature) props = l.feature.properties;
+    });
+
+    // 🔥 popup tabel atribut TANPA tombol download
+    let html = "<div style='font-size:12px;max-height:200px;overflow:auto'>";
+    html += "<table style='border-collapse:collapse;width:100%'>";
+
+    if(props){
+        for(let k in props){
+            html += `
+            <tr>
+                <td style="border:1px solid #ccc;padding:4px;font-weight:bold">${k}</td>
+                <td style="border:1px solid #ccc;padding:4px">${props[k]}</td>
+            </tr>`;
+        }
+    }else{
+        html += "<tr><td>Tidak ada atribut</td></tr>";
+    }
+
+    html += "</table></div>";
+
+    marker.bindPopup(html,{
+        closeButton:false,
+        autoClose:false,
+        closeOnClick:false
+    });
+
+    // hover popup (biar bisa ditahan)
+    let isHover = false;
+    let popupHover = false;
+
+    marker.on("mouseover", function(){
+        isHover = true;
+        this.openPopup();
+    });
+
+    marker.on("mouseout", function(){
+        isHover = false;
+        setTimeout(()=>{
+            if(!isHover && !popupHover){
+                marker.closePopup();
+            }
+        },200);
+    });
+
+    marker.on("popupopen", function(){
+        const el = marker.getPopup().getElement();
+
+        if(!el._binded){
+            el.addEventListener("mouseenter", ()=> popupHover = true);
+            el.addEventListener("mouseleave", ()=>{
+                popupHover = false;
+                setTimeout(()=>{
+                    if(!isHover && !popupHover){
+                        marker.closePopup();
+                    }
+                },200);
+            });
+            el._binded = true;
+        }
+    });
+
+    // simpan marker
+    layerStore[key].marker = marker;
+}
+    
+async function loadLayer(key){
+    console.log("LOAD:", key, layerStore[key].url);
     if(layerStore[key].layer){
         map.addLayer(layerStore[key].layer);
         return;
@@ -441,88 +537,73 @@ async function loadLayer(key){
 
     let layer;
 
-    // ================= SHP (.zip) =================
-    if(layerStore[key].url.endsWith(".zip")){
+    const txtData = await fetchTXT(key);
 
-        const res = await fetch(layerStore[key].url);
-        const buffer = await res.arrayBuffer();
-        const geo = await shp(buffer);
+    // ================= ZIP (SHP) =================
+    if(layerStore[key].url.toLowerCase().endsWith(".zip")){
 
-        layer = L.geoJSON(geo,{
+    const buffer = await (await fetch(layerStore[key].url)).arrayBuffer();
+    const geo = await shp(buffer);
 
-            // 🔥 FILTER hanya POINT
-            filter:function(feature){
-                return feature.geometry.type === "Point" || 
-                       feature.geometry.type === "MultiPoint";
-            },
-
-            pointToLayer:function(feature,latlng){
-
-                let html="<div style='font-size:13px'>";
-                for(let p in feature.properties){
-                    if(feature.properties[p]){
-                        html += `<b>${p}</b>: ${feature.properties[p]}<br>`;
-                    }
-                }
-                html+="</div>";
-
-                return L.marker(latlng).bindPopup(html);
-            }
-
-        }).addTo(map);
-
-        addCenterMarker(layer,key);
+    if(!geo || !geo.features || geo.features.length === 0){
+        console.error("GeoJSON kosong:", key);
+        return;
     }
 
-    // ================= KML / KMZ =================
+    layer = L.geoJSON(geo);
+
+// ❌ jangan tampilkan polygon
+// map.addLayer(layer);  ← HAPUS / jangan dipanggil
+
+createOffsetMarker(layer, key, txtData);
+}
+
+    // ================= KMZ =================
+    else if(layerStore[key].url.toLowerCase().endsWith(".kmz")){
+
+        const buffer = await (await fetch(layerStore[key].url)).arrayBuffer();
+        const zip = await JSZip.loadAsync(buffer);
+
+        let kmlFile=null;
+        zip.forEach((p,z)=>{
+            if(p.toLowerCase().endsWith(".kml")) kmlFile=z;
+        });
+
+        if(!kmlFile){
+            console.error("KML tidak ditemukan:", key);
+            return;
+        }
+
+        const text = await kmlFile.async("text");
+
+        const blob = new Blob([text],{type:"text/xml"});
+        const url = URL.createObjectURL(blob);
+
+        layer = omnivore.kml(url);
+
+        layer.on("ready",()=>{
+            createOffsetMarker(layer, key, txtData);
+
+// ❌ jangan tampilkan polygon
+// layer.addTo(map); ← HAPUS
+        });
+    }
+
+    // ================= KML =================
     else{
 
         layer = omnivore.kml(layerStore[key].url);
 
-        layer.on("ready", async function(){
+        layer.on("ready",()=>{
+            createOffsetMarker(layer, key, txtData);
 
-    // ====== Ambil nama file tanpa ekstensi ======
-    const fileName = layerStore[key].url.split("/").pop().replace(".kmz","");
-
-    // ====== Buat URL txt ======
-    const txtUrl = layerStore[key].url.replace(".kmz",".txt");
-
-    let txtContent = "";
-
-    try{
-        const resTxt = await fetch(txtUrl);
-        txtContent = await resTxt.text();
-    }catch(e){
-        txtContent = "Atribut tidak ditemukan";
+// ❌ jangan tampilkan polygon
+// layer.addTo(map); ← HAPUS
+        });
     }
 
-    layer.eachLayer(function(l){
-
-        if(l instanceof L.Marker){
-            layer.removeLayer(l);
-            return;
-        }
-
-        let html = `
-        <div style="font-size:13px">
-        <b>${fileName}</b><hr>
-        ${txtContent}
-        <hr>
-        <a href="${layerStore[key].url}" target="_blank"
-        style="display:inline-block;padding:6px 10px;
-        background:#2c7be5;color:white;
-        text-decoration:none;border-radius:4px">
-        Download File
-        </a>
-        </div>
-        `;
-
-        l.bindPopup(html);
-
-    });
-
-});
-  
+    layerStore[key].layer = layer;
+}
 /* ================= UPLOAD ================= */
 uploadInput.addEventListener("change",async e=>{
 for(const file of e.target.files){
@@ -580,20 +661,105 @@ map.removeLayer(layer);
 toggle.click();
 }
 });
+    
+function attachInteraction(layerItem, key, txtData, layer){
 
-(async function(){
+    // ambil atribut dari feature
+    const props = layerItem.feature ? layerItem.feature.properties : null;
 
-    await loadStructure();
+    let html = "<div style='font-size:13px;max-height:200px;overflow:auto'>";
+    html += "<table style='border-collapse:collapse;width:100%'>";
 
-    // aktifkan semua toggle (kategori + tahun)
-    document.querySelectorAll(".toggle").forEach(t=>{
-        if(!t.classList.contains("active")){
-            t.click();
+    if(props){
+        for(let k in props){
+            html += `
+            <tr>
+                <td style="border:1px solid #ccc;padding:4px;font-weight:bold">${k}</td>
+                <td style="border:1px solid #ccc;padding:4px">${props[k]}</td>
+            </tr>`;
+        }
+    }else{
+        html += "<tr><td>Tidak ada atribut</td></tr>";
+    }
+
+    html += "</table>";
+
+    // tombol download
+    html += `<hr>
+    <button onclick="downloadAll('${key}')"
+    style="background:#2c7be5;color:white;padding:6px 10px;
+    border:none;border-radius:4px;cursor:pointer">
+    Download
+    </button></div>`;
+
+    layerItem.bindPopup(html,{
+        closeButton:false,
+        autoClose:false,
+        closeOnClick:false
+    });
+
+    // ================= HOVER =================
+    let isHover = false;
+    let popupHover = false;
+
+    layerItem.on("mouseover", function(e){
+        isHover = true;
+        this.openPopup(e.latlng);
+    });
+
+    layerItem.on("mouseout", function(){
+        isHover = false;
+        setTimeout(()=>{
+            if(!isHover && !popupHover){
+                layerItem.closePopup();
+            }
+        },200);
+    });
+
+    layerItem.on("popupopen", function(){
+        const el = layerItem.getPopup().getElement();
+
+        if(!el._binded){
+            el.addEventListener("mouseenter", ()=> popupHover = true);
+            el.addEventListener("mouseleave", ()=>{
+                popupHover = false;
+                setTimeout(()=>{
+                    if(!isHover && !popupHover){
+                        layerItem.closePopup();
+                    }
+                },200);
+            });
+            el._binded = true;
         }
     });
 
-})();
+    // ================= CLICK → ZOOM =================
+    layerItem.on("click", function(){
+        const bounds = layerItem.getBounds ? layerItem.getBounds() : null;
 
+        if(bounds && bounds.isValid()){
+            map.flyToBounds(bounds,{
+                padding:[50,50],
+                maxZoom:16,
+                duration:1.2
+            });
+        }
+    });
+}
+    
+async function downloadAll(key){
+
+    const fileUrl = layerStore[key].url;
+
+    // download file utama
+    const a1 = document.createElement("a");
+    a1.href = fileUrl;
+    a1.download = "";
+    document.body.appendChild(a1);
+    a1.click();
+    a1.remove();
+}    
+loadStructure();
 </script>
 
 </body>
