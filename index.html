@@ -447,9 +447,8 @@ function createOffsetMarker(layer, key, txtData){
 
     const center = bounds.getCenter();
 
-    // 🔥 Geser ±10 km (≈0.09 derajat)
-    const offsetLat = center.lat + (Math.random() * 0.18 - 0.09);
-    const offsetLng = center.lng + (Math.random() * 0.18 - 0.09);
+    const offsetLat = center.lat + (Math.random() * 0.09 - 0.045);
+    const offsetLng = center.lng + (Math.random() * 0.09 - 0.045);
 
     const icon = L.icon({
         iconUrl: markerImage,
@@ -507,6 +506,19 @@ function createOffsetMarker(layer, key, txtData){
         },200);
     });
 
+    marker.on("click", function(){
+
+    const bounds = layer.getBounds();
+
+    if(bounds && bounds.isValid()){
+        map.flyToBounds(bounds,{
+            padding:[50,50],
+            maxZoom:16,
+            duration:1.2
+        });
+    }
+});
+
     marker.on("popupopen", function(){
         const el = marker.getPopup().getElement();
 
@@ -531,9 +543,14 @@ function createOffsetMarker(layer, key, txtData){
 async function loadLayer(key){
     console.log("LOAD:", key, layerStore[key].url);
     if(layerStore[key].layer){
-        map.addLayer(layerStore[key].layer);
-        return;
+
+    // tampilkan marker lagi kalau ada
+    if(layerStore[key].marker){
+        map.addLayer(layerStore[key].marker);
     }
+
+    return;
+}
 
     let layer;
 
