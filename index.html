@@ -144,8 +144,7 @@ const customIcon = L.icon({
     iconSize: [32, 32],
     iconAnchor: [16, 32]
 });
-const angle = Math.random() * 360;
-const shifted = offsetLatLng(center, 2, angle);
+
 const map = L.map('map', {
     minZoom: 5,     // tidak bisa zoom out lebih jauh dari Indonesia
     maxZoom: 18     // tetap bisa zoom in detail
@@ -484,7 +483,8 @@ async function loadLayer(key){
             const center = l.getBounds().getCenter();
 
             // geser 2 km
-            const shifted = offsetLatLng(center, 2, 45);
+            const angle = Math.random() * 360;
+const shifted = offsetLatLng(center, 2, angle);
 
             const marker = L.marker(shifted, {icon: customIcon}).addTo(map);
 
@@ -525,7 +525,8 @@ async function loadLayer(key){
     if(l.getBounds){
         const center = l.getBounds().getCenter();
 
-        const shifted = offsetLatLng(center, 2, 45);
+        const angle = Math.random() * 360;
+const shifted = offsetLatLng(center, 2, angle);
 
         const marker = L.marker(shifted, {icon: customIcon}).addTo(map);
 
@@ -551,7 +552,8 @@ async function loadLayer(key){
     if(l.getBounds){
         const center = l.getBounds().getCenter();
 
-        const shifted = offsetLatLng(center, 2, 45);
+        const angle = Math.random() * 360;
+const shifted = offsetLatLng(center, 2, angle);
 
         const marker = L.marker(shifted, {icon: customIcon}).addTo(map);
 
