@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <title>GeoSpatialNusantaraIntern</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial
+        }
+
+        .interactive-map-container {
+            position: relative;
+            width: 90%;
+            max-width: 1200px;
+            height: 600px;
+            margin: 10px auto 50px; /* Jarak atas didekatkan ke judul, jarak bawah diperlebar */
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            overflow: hidden;
+            z-index: 10;
+            background: #fff;
+            color: #333; /* Menetralisir pewarnaan font putih bawaan landing page, biarkan hitam */
+            text-align: left; /* Menetralisir perataan teks tengah bawaan landing page */
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+        }
+
+        .leaflet-popup-content table {
+            font-size: 12px;
+        }
+
+        .leaflet-popup-content td {
+            word-break: break-word;
+        }
+
+        /* ================= SIDEBAR ================= */
+        #sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+
+            width: auto;
+            min-width: 240px;
+            max-width: 320px;
+
+            height: 100%;
+            background: #f4f4f4;
+            box-shadow: -3px 0 10px rgba(0, 0, 0, .2);
+            transform: translateX(100%);
+            transition: .3s;
+            z-index: 1000;
+            overflow: hidden;
+            padding: 10px;
+        }
+
+        #sidebar.active {
+            transform: translateX(0)
+        }
+
+        #toggleBtn {
+            position: absolute;
+            top: 95px;
+            right: 15px;
+            z-index: 2000;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+            transition: right .3s ease;
+        }
+
+        .leaflet-top {
+            top: 80px !important;
+            /* Diturunkan agar tombol zoom tidak tertutup navbar */
+        }
+
+        /* ================= TABS ================= */
+        .tabs {
+            display: flex;
+            background: #e0e0e0
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom: 3px solid #2c7be5
+        }
+
+        .tab-content {
+            display: none;
+            padding: 15px;
+            height: calc(100% - 45px);
+            overflow: auto
+        }
+
+        .tab-content.active {
+            display: block
+        }
+
+        /* ================= ROW ================= */
+        .row {
+            display: flex;
+            align-items: center;
+            margin-top: 8px
+        }
+
+        .arrow {
+            margin-right: 6px;
+            cursor: pointer;
+            transition: .3s
+        }
+
+        .arrow.rotate {
+            transform: rotate(90deg)
+        }
+
+        .toggle {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #bbb;
+            margin-right: 8px;
+            cursor: pointer;
+            transition: .2s;
+        }
+
+        .toggle.active {
+            background: #2c7be5
+        }
+
+        .year-container {
+            display: none;
+            margin-left: 20px
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        .leaflet-control-layers label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .leaflet-control-layers input {
+            margin: 0;
+        }
+
+        #searchResult div {
+            padding: 6px;
+            background: white;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+
+        #searchResult div:hover {
+            background: #2c7be5;
+            color: white;
+        }
+
+        #sidebar span {
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        #logoTop {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+
+            height: 50px;
+            /* bisa diubah sesuai kebutuhan */
+            pointer-events: none;
+            /* biar tidak ganggu klik map */
+        }
+
+        /* ================= DASHBOARD OVERLAY (Landing Page) ================= */
+        html,
+        #landing-dashboard {
+            scroll-behavior: smooth;
+        }
+
+        #landing-dashboard {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #0f172a;
+            z-index: 9999;
+            overflow-y: auto;
+            overflow-x: hidden;
+            color: #f8fafc;
+            font-family: 'Outfit', sans-serif;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+        }
+
+        /* NAVBAR */
+        .landing-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 8%;
+            /* Menggeser area navbar lebih ke tengah */
+            background: rgba(255, 255, 255, 0.2);
+            /* 80% transparan (opacity 20%) */
+            backdrop-filter: blur(10px);
+            /* Efek kaca */
+            border-bottom: 2px solid #2563eb;
+            /* Garis kontras biru bagian bawah dikembalikan */
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.1);
+            z-index: 10000;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .landing-nav .logo img {
+            max-height: 85px;
+            /* Logo dibesarkan secara signifikan agar menonjol */
+            display: block;
+            /* Filter outline dihapus karena background sudah putih */
+        }
+
+        .landing-nav .nav-links {
+            display: flex;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .landing-nav .nav-links a {
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.15rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 8px 20px; /* Padding identik dengan tombol */
+            border-radius: 50px; /* Sudut membulat seperti tombol Buka Peta */
+            background: transparent; /* Transparan pada keadaan normal */
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .landing-nav .nav-links a:hover {
+            color: #2563eb;
+            transform: translateY(-2px);
+        }
+
+        .landing-nav .nav-links a.active {
+            color: #ffffff;
+            background: linear-gradient(135deg, #2563eb, #4f46e5); /* Warna background ala Buka Peta */
+            box-shadow: 0 5px 15px rgba(37, 99, 235, 0.4); /* Efek glow bayangan tombol */
+            text-shadow: none; /* Hilangkan shadow teks karena dasar sudah berwarna */
+            transform: translateY(-2px);
+        }
+
+        /* SECTIONS */
+        .landing-section {
+            min-height: 100vh;
+            padding: 100px 50px 50px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        #beranda {
+            align-items: center;
+            text-align: center;
+            /* Background transparan gradasi dilapisi oleh gambar dari url. Dikurangi intensitas gelapnya agar lebih terang */
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.2), rgba(30, 41, 59, 0.4)), url('img/bg-beranda.jpg') no-repeat center center/cover;
+        }
+
+        #beranda .hero-logo {
+            max-height: 250px;
+            margin-bottom: 25px;
+            width: auto;
+            animation: fadeInDown 1.2s ease-out;
+            filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.7));
+        }
+
+        #beranda p {
+            font-size: 1.25rem;
+            color: #ffffff;
+            /* Lebih cerah / putih murni */
+            margin-bottom: 40px;
+            max-width: 700px;
+            line-height: 1.6;
+            font-weight: 400;
+            /* Lebih tebal sedikit */
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+            /* Bayangan kuat agar tidak tabrakan dengan background yang sudah terang */
+            animation: fadeInUp 1s ease-out 0.2s both;
+        }
+
+        #portofolio {
+            background: #0f172a;
+            position: relative;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.8rem;
+            color: #f8fafc;
+            margin-bottom: 60px;
+            font-weight: 800;
+        }
+
+        .section-title span {
+            color: #38bdf8;
+        }
+
+        .portfolio-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .portfolio-card {
+            background: #1e293b;
+            border-radius: 16px;
+            overflow: hidden;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+        }
+
+        .portfolio-card:hover {
+            transform: translateY(-12px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .portfolio-img {
+            width: 100%;
+            height: 220px;
+            background: linear-gradient(45deg, #334155, #475569);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .portfolio-content {
+            padding: 25px;
+        }
+
+        .portfolio-content h3 {
+            margin: 0 0 12px 0;
+            color: #e2e8f0;
+            font-size: 1.5rem;
+        }
+
+        .portfolio-content p {
+            margin: 0;
+            color: #94a3b8;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .cta-btn {
+            padding: 14px 35px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            font-family: 'Outfit', sans-serif;
+            color: #ffffff;
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .cta-btn:hover {
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 0 15px 35px rgba(37, 99, 235, 0.6);
+        }
+
+        .cta-btn:active {
+            transform: translateY(1px);
+        }
+
+        .cta-btn.nav-btn {
+            padding: 10px 25px;
+            font-size: 1rem;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="landing-nav">
+        <a href="#beranda" class="logo">
+            <img src="img/logo-navbar.png" alt="GeoSpatial Nusantara Logo">
+        </a>
+        <div class="nav-links">
+            <a href="#beranda">Beranda</a>
+            <a href="#tentang">Tentang</a>
+            <a href="#layanan">Layanan</a>
+            <a href="#portofolio">Portofolio</a>
+            <a href="#mitra">Mitra</a>
+        </div>
+    </nav>
+
+    <!-- DASHBOARD FULL PAGE -->
+    <div id="landing-dashboard">
+
+        <!-- BERANDA (HERO) -->
+        <section id="beranda" class="landing-section">
+            <img src="img/logo-geospatial.png" alt="GeoSpatial Nusantara" class="hero-logo">
+            <p>Sistem Informasi Geografis interaktif untuk pemetaan dan analisis data spasial di seluruh wilayah
+                Nusantara. Jelajahi berbagai lapisan peta dan temukan wawasan geografis dengan mudah.</p>
+            <a href="#tentang" class="cta-btn" style="text-decoration: none;">Tentang Kami</a>
+        </section>
+
+        <!-- TENTANG -->
+        <section id="tentang" class="landing-section">
+            <h2 class="section-title"><span>Tentang</span> Kami</h2>
+            <p
+                style="text-align: center; color: #cbd5e1; max-width: 800px; margin: 0 auto; line-height: 1.8; font-size: 1.2rem;">
+                GeoSpatial Nusantara bersinergi menjadi mitra terpercaya Anda untuk memberikan solusi tata ruang dan
+                penyelenggaraan informasi geospasial yang akurat.
+            </p>
+        </section>
+
+        <!-- LAYANAN -->
+        <section id="layanan" class="landing-section">
+            <h2 class="section-title">Layanan <span>Utama</span></h2>
+            <p
+                style="text-align: center; color: #cbd5e1; max-width: 800px; margin: 0 auto; line-height: 1.8; font-size: 1.2rem;">
+                Mulai dari pendataan pemetaan topografi, analisis spasial mutakhir, hingga pengembangan ekosistem SIG
+                berbasis jaringan masa kini.
+            </p>
+        </section>
+
+        <!-- PORTOFOLIO -->
+        <section id="portofolio" class="landing-section">
+            <h2 class="section-title" style="margin-bottom: 25px;">Peta <span>&</span> Portofolio</h2>
+
+            <!-- WIDGET PETA MENGAMBANG -->
+            <div class="interactive-map-container">
+                <div id="map"></div>
+                <img src="img/logo.png" id="logoTop">
+                <button id="toggleBtn">☰</button>
+
+                <div id="sidebar">
+
+                    <div class="tabs">
+                        <div class="tab active" data-tab="layerTab">Layer</div>
+                        <div class="tab" data-tab="uploadTab">Upload</div>
+                    </div>
+
+                    <div id="layerTab" class="tab-content active">
+
+                        <input type="text" id="searchInput" placeholder="Cari file... (contoh: 2023, jalan, sulawesi)">
+                        <div id="searchResult" style="margin-bottom:15px;"></div>
+
+                        <div id="layerList"></div> <!-- WAJIB ADA -->
+
+                    </div>
+                    <div id="layerTab" class="tab-content active">
+
+                        <input type="text" id="searchInput" placeholder="Cari file... (contoh: 2023, jalan, sulawesi)">
+                        <div id="searchResult" style="margin-bottom:15px;"></div>
+
+                    </div>
+
+                    <div id="uploadTab" class="tab-content">
+                        <input type="file" id="uploadInput" multiple accept=".zip,.kml,.kmz">
+                        <hr>
+                        <div id="uploadList"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="portfolio-grid" style="margin-top: 60px;">
+
+                <!-- Card 1 -->
+                <div class="portfolio-card">
+                    <div class="portfolio-img">Citra Satelit Dummy</div>
+                    <div class="portfolio-content">
+                        <h3>Pemetaan Tutupan Lahan</h3>
+                        <p>Analisis spasial untuk menentukan klasifikasi tutupan lahan menggunakan visualisasi satelit
+                            beresolusi tinggi di area perkotaan.</p>
+                    </div>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="portfolio-card">
+                    <div class="portfolio-img">Peta Batimetri Dummy</div>
+                    <div class="portfolio-content">
+                        <h3>Survei Batimetri</h3>
+                        <p>Penyediaan data kedalaman laut (SBES/MBES) untuk mendukung navigasi dan rancang bangun
+                            pelabuhan komersial tingkat nasional.</p>
+                    </div>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="portfolio-card">
+                    <div class="portfolio-img">Model 3D Dummy</div>
+                    <div class="portfolio-content">
+                        <h3>Pemetaan LiDAR & UAV</h3>
+                        <p>Rekonstruksi model elevasi digital dan ekstraksi fitur bangunan di wilayah perbukitan
+                            menggunakan pemindaian drone.</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- MITRA -->
+        <section id="mitra" class="landing-section">
+            <h2 class="section-title"><span>Mitra</span> Kami</h2>
+            <p style="text-align: center; color: #cbd5e1; font-size: 1.2rem;">
+                Dipercaya oleh puluhan korporasi dan institusi pemerintah di seluruh penjuru negeri yang menginginkan
+                keandalan data geografis.
+        </section>
+
+        <!-- FOOTER -->
+        <footer style="text-align: center; padding: 40px 20px; background: rgba(15, 23, 42, 1); border-top: 1px solid rgba(255,255,255,0.05); color: #94a3b8; font-size: 1rem; margin-top: auto;">
+            &copy; 2026 GeoSpatial Nusantara. Hak Cipta Dilindungi.<br>
+            <span style="font-size: 0.85rem; color: #64748b; margin-top: 5px; display: inline-block;">Sistem Informasi Geografis Terpadu</span>
+        </footer>
+
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
+    <script src="https://unpkg.com/leaflet-omnivore@latest/leaflet-omnivore.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <script>
+        const OWNER = "GeoSpatialNusantara";
+        const REPO = "WebGis";
+        const BRANCH = "main";
+        const ROOT = "file";
+        const markerImage = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/img/point-of-interest.png`;
+
+        const map = L.map('map', {
+            minZoom: 5,     // tidak bisa zoom out lebih jauh dari Indonesia
+            maxZoom: 18     // tetap bisa zoom in detail
+        }).setView([-2.5, 118], 5);
+
+        // ================= LEGENDA MAP =================
+        const legendControl = L.control({ position: 'bottomleft' });
+
+        legendControl.onAdd = function () {
+            const div = L.DomUtil.create('div');
+
+            div.style.background = "white";
+            div.style.padding = "10px";
+            div.style.borderRadius = "8px";
+            div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+            div.style.fontSize = "12px";
+            div.style.maxHeight = "200px";
+            div.style.overflowY = "auto";
+
+            div.innerHTML = "<b>Legenda</b><div id='legendList'></div>";
+
+            return div;
+        };
+
+        legendControl.addTo(map);
+
+        // Basemap OSM (default)
+        const osm = L.tileLayer(
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            { attribution: '© OpenStreetMap' }
+        );
+
+        // Basemap Satellite Hybrid (Satelit + Label)
+        const satellite = L.layerGroup([
+            L.tileLayer(
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                { attribution: 'Tiles © Esri' }
+            ),
+            L.tileLayer(
+                'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+                { attribution: 'Labels © Esri' }
+            )
+        ]);
+
+        // tampilkan default
+        satellite.addTo(map);
+
+        // kontrol layer (pojok kiri atas)
+        L.control.layers(
+            {
+                "One Street Map": osm,
+                "Satellite": satellite
+            },
+            null,
+            { position: 'topleft' }
+        ).addTo(map);
+
+        toggleBtn.onclick = () => {
+            sidebar.classList.toggle("active");
+
+            if (sidebar.classList.contains("active")) {
+                const width = sidebar.offsetWidth;   // ✅ ambil lebar real
+                toggleBtn.style.right = (width + 15) + "px";
+            } else {
+                toggleBtn.style.right = "15px";
+            }
+        };
+
+        document.querySelectorAll(".tab").forEach(tab => {
+            tab.onclick = function () {
+                document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+                document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+                tab.classList.add("active");
+                document.getElementById(tab.dataset.tab).classList.add("active");
+            };
+        });
+
+        let categoryColors = {
+            "Batimetri MBES": "#e6194b",
+            "Batimetri SBES": "#ffe119",
+            "Foto Udara UAV": "#3cb44b",
+            "GIS": "#4363d8",
+            "LiDAR Pesawat": "#f58231",
+            "LiDAR UAV": "#911eb4",
+            "Penetapan Batas": "#46f0f0"
+        };
+
+        function getCategoryFromPath(path) {
+            return path.split("/")[1];
+        }
+
+        function renderLegend() {
+            const legendList = document.getElementById("legendList");
+            if (!legendList) return;
+
+            legendList.innerHTML = "";
+
+            Object.keys(categoryColors).sort().forEach(category => {
+
+                const color = categoryColors[category];
+
+                const row = document.createElement("div");
+                row.style.display = "flex";
+                row.style.alignItems = "center";
+                row.style.marginBottom = "6px";
+
+                const box = document.createElement("div");
+                box.style.width = "16px";
+                box.style.height = "16px";
+                box.style.background = color;
+                box.style.marginRight = "8px";
+                box.style.borderRadius = "3px";
+                box.style.border = "1px solid #999";
+
+                const label = document.createElement("span");
+                label.innerText = formatLabel(category).replace(/\b\w/g, c => c.toUpperCase());
+
+                row.appendChild(box);
+                row.appendChild(label);
+
+                legendList.appendChild(row);
+            });
+        }
+        let layerStore = {};
+
+        const searchInput = document.getElementById("searchInput");
+        const searchResult = document.getElementById("searchResult");
+
+        searchInput.addEventListener("input", function () {
+
+            const keyword = this.value.toLowerCase();
+            searchResult.innerHTML = "";
+
+            if (keyword.length < 2) {
+                searchResult.innerHTML = "";
+                return;
+            }
+
+            for (let key in layerStore) {
+
+                const fileName = key.split("/").pop().toLowerCase();
+
+                if (fileName.includes(keyword)) {
+
+                    const item = document.createElement("div");
+                    item.innerText = key.split("/").pop();
+
+                    item.onclick = async function () {
+
+                        await loadLayer(key);
+
+                        const layer = layerStore[key].layer;
+
+                        if (layer) {
+                            const bounds = layer.getBounds();
+                            if (bounds && bounds.isValid()) {
+                                map.fitBounds(bounds, {
+                                    padding: [50, 50],
+                                    maxZoom: 16
+                                });
+                            }
+                        }
+                        searchResult.innerHTML = "";
+                        searchInput.value = "";
+                    };
+
+                    searchResult.appendChild(item);
+                }
+            }
+        });
+
+        async function fetchGitHub(path) {
+            const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${BRANCH}`;
+            const res = await fetch(url);
+            return await res.json();
+        }
+
+        async function fetchTXT(key) {
+            const txtPath = key.replace(/\.(zip|kml|kmz)$/i, ".txt");
+            const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${txtPath}`;
+
+            try {
+                const res = await fetch(url + "?t=" + Date.now()); // ⬅️ anti cache
+                if (!res.ok) {
+                    console.warn("TXT tidak ditemukan:", url);
+                    return null;
+                }
+
+                const text = await res.text();
+                return text.trim(); // ⬅️ penting
+            } catch (e) {
+                console.error("Fetch TXT error:", e);
+                return null;
+            }
+        }
+
+        async function loadStructure() {
+            const container = document.getElementById("layerList");
+            const cats = await fetchGitHub(ROOT);
+
+            for (const cat of cats) {
+                if (cat.type !== "dir") continue;
+
+                const row = document.createElement("div");
+                row.className = "row";
+
+                const arrow = document.createElement("span");
+                arrow.className = "arrow";
+                arrow.innerHTML = "▶";
+
+                const catToggle = document.createElement("div");
+                catToggle.className = "toggle";
+
+                const label = document.createElement("span");
+                label.innerText = cat.name;
+
+                row.append(arrow, catToggle, label);
+                container.appendChild(row);
+
+                const yearContainer = document.createElement("div");
+                yearContainer.className = "year-container";
+                container.appendChild(yearContainer);
+
+                arrow.onclick = () => {
+                    yearContainer.style.display =
+                        yearContainer.style.display === "block" ? "none" : "block";
+                    arrow.classList.toggle("rotate");
+                };
+
+                let yearToggles = [];
+
+                catToggle.onclick = async (e) => {
+                    e.stopPropagation();
+                    catToggle.classList.toggle("active");
+                    const active = catToggle.classList.contains("active");
+
+                    for (const y of yearToggles) {
+                        if (active && !y.classList.contains("active")) await y.click();
+                        if (!active && y.classList.contains("active")) await y.click();
+                    }
+                };
+
+                const years = await fetchGitHub(cat.path);
+
+                for (const year of years) {
+                    if (year.type !== "dir") continue;
+
+                    const yRow = document.createElement("div");
+                    yRow.className = "row";
+
+                    const yToggle = document.createElement("div");
+                    yToggle.className = "toggle";
+
+                    const yLabel = document.createElement("span");
+                    yLabel.innerText = year.name;
+
+                    yRow.append(yToggle, yLabel);
+                    yearContainer.appendChild(yRow);
+
+                    yearToggles.push(yToggle);
+
+                    const files = await fetchGitHub(year.path);
+                    for (const file of files) {
+                        if (!file.name.match(/\.(zip|kml|kmz)$/i)) continue;
+                        layerStore[file.path] = { url: file.download_url, layer: null, marker: null };
+                    }
+
+                    yToggle.onclick = () => toggleYear(year.path, yToggle);
+                }
+            }
+        }
+
+        async function toggleYear(path, toggle) {
+            toggle.classList.toggle("active");
+            const active = toggle.classList.contains("active");
+
+            for (let key in layerStore) {
+                if (key.startsWith(path)) {
+                    if (active) {
+                        await loadLayer(key);
+                    } else {
+                        if (layerStore[key].layer) {
+                            map.removeLayer(layerStore[key].layer);
+                            layerStore[key].layer = null;   // 🔥 INI KUNCINYA
+                        }
+
+                        if (layerStore[key].marker) {
+                            map.removeLayer(layerStore[key].marker);
+                            layerStore[key].marker = null;  // 🔥 biar marker tidak nyangkut
+                        }
+                    }
+                }
+            }
+        }
+
+        function addCenterMarker(layer, key) {
+
+            const bounds = layer.getBounds();
+            if (!bounds || !bounds.isValid()) return;
+
+            const center = bounds.getCenter();
+
+            const icon = L.icon({
+                iconUrl: markerImage,
+                iconSize: [30, 30],
+                iconAnchor: [15, 30]
+            });
+
+            if (layerStore[key].marker) {
+                map.removeLayer(layerStore[key].marker);
+            }
+
+            const fileName = key.split("/").pop();
+            const fileUrl = layerStore[key].url;
+
+            const marker = L.marker(center, { icon }).addTo(map);
+
+            // isi popup dengan nama + link download
+            const popupContent = `
+        <div style="text-align:center;">
+            <b>${fileName}</b><br>
+            <a href="${fileUrl}" download style="color:#2c7be5;text-decoration:none;font-weight:bold;">
+                Download
+            </a>
+        </div>
+    `;
+
+            marker.bindPopup(popupContent, {
+                closeButton: false,
+                autoClose: false,
+                closeOnClick: false,
+                offset: [0, -25]
+            });
+            let popupHovered = false;
+            let markerHovered = false;
+
+            marker.on("mouseover", function () {
+                markerHovered = true;
+                this.openPopup();
+            });
+
+            marker.on("mouseout", function () {
+                markerHovered = false;
+                setTimeout(() => {
+                    if (!popupHovered && !markerHovered) {
+                        marker.closePopup();
+                    }
+                }, 200);
+            });
+
+            marker.on("click", function () {
+                const bounds = layer.getBounds();
+                if (bounds && bounds.isValid()) {
+                    map.fitBounds(bounds, {
+                        padding: [50, 50],
+                        maxZoom: 16
+                    });
+                }
+            });
+
+            marker.on("popupopen", function () {
+                const popupEl = marker.getPopup().getElement();
+
+                if (!popupEl._hoverBound) {
+
+                    popupEl.addEventListener("mouseenter", function () {
+                        popupHovered = true;
+                    });
+
+                    popupEl.addEventListener("mouseleave", function () {
+                        popupHovered = false;
+                        setTimeout(() => {
+                            if (!popupHovered && !markerHovered) {
+                                marker.closePopup();
+                            }
+                        }, 200);
+                    });
+
+                    popupEl._hoverBound = true;
+                }
+            });
+
+            layerStore[key].marker = marker;
+
+        }
+
+        async function loadLayer(key) {
+            console.log("LOAD:", key, layerStore[key].url);
+            if (layerStore[key].layer) {
+                if (!map.hasLayer(layerStore[key].layer)) {
+                    map.addLayer(layerStore[key].layer);
+                }
+                return;
+            }
+
+            let layer;
+
+            const txtData = await fetchTXT(key);
+
+            // ================= ZIP (SHP) =================
+            if (layerStore[key].url.toLowerCase().endsWith(".zip")) {
+
+                const buffer = await (await fetch(layerStore[key].url)).arrayBuffer();
+                const geo = await shp(buffer);
+
+                if (!geo || !geo.features || geo.features.length === 0) {
+                    console.error("GeoJSON kosong:", key);
+                    return;
+                }
+
+                // ✅ ambil kategori DI LUAR
+                const category = getCategoryFromPath(key);
+
+                // ✅ baru buat layer
+                layer = L.geoJSON(geo, {
+                    style: {
+                        color: categoryColors[category],
+                        weight: 2,
+                        fillOpacity: 0.3
+                    },
+                    onEachFeature: (f, l) => attachInteraction(l, key, txtData || null, layer)
+                }).addTo(map);
+            }
+
+            // ================= KMZ =================
+            else if (layerStore[key].url.toLowerCase().endsWith(".kmz")) {
+
+                const buffer = await (await fetch(layerStore[key].url)).arrayBuffer();
+                const zip = await JSZip.loadAsync(buffer);
+
+                let kmlFile = null;
+                zip.forEach((p, z) => {
+                    if (p.toLowerCase().endsWith(".kml")) kmlFile = z;
+                });
+
+                if (!kmlFile) {
+                    console.error("KML tidak ditemukan:", key);
+                    return;
+                }
+
+                const text = await kmlFile.async("text");
+
+                const blob = new Blob([text], { type: "text/xml" });
+                const url = URL.createObjectURL(blob);
+
+                layer = omnivore.kml(url);
+
+                layer.on("ready", () => {
+                    const category = getCategoryFromPath(key);
+
+                    layer.eachLayer(l => {
+                        if (l instanceof L.Marker) return;
+
+                        if (l.setStyle) {
+                            l.setStyle({
+                                color: categoryColors[category],
+                                weight: 2,
+                                fillOpacity: 0.3
+                            });
+                        }
+
+                        attachInteraction(l, key, txtData || null, layer)
+                    });
+
+                    layer.addTo(map);
+                });
+            }
+
+            // ================= KML =================
+            else {
+
+                layer = omnivore.kml(layerStore[key].url);
+
+                layer.on("ready", () => {
+                    const category = getCategoryFromPath(key);
+
+                    layer.eachLayer(l => {
+                        if (l instanceof L.Marker) return;
+
+                        if (l.setStyle) {
+                            l.setStyle({
+                                color: categoryColors[category],
+                                weight: 2,
+                                fillOpacity: 0.3
+                            });
+                        }
+
+                        attachInteraction(l, key, txtData || null, layer)
+                    });
+
+                    layer.addTo(map);
+                });
+            }
+
+            layerStore[key].layer = layer;
+        }
+        /* ================= UPLOAD ================= */
+        uploadInput.addEventListener("change", async e => {
+            for (const file of e.target.files) {
+
+                let layer;
+                if (file.name.endsWith(".zip")) {
+                    const buffer = await file.arrayBuffer();
+                    const geo = await shp(buffer);
+                    layer = L.geoJSON(geo);
+                } else if (file.name.endsWith(".kmz")) {
+                    const buffer = await file.arrayBuffer();
+                    const zip = await JSZip.loadAsync(buffer);
+
+                    let kmlFile;
+                    zip.forEach((relativePath, zipEntry) => {
+                        if (relativePath.endsWith(".kml")) {
+                            kmlFile = zipEntry;
+                        }
+                    });
+
+                    if (kmlFile) {
+                        const kmlText = await kmlFile.async("text");
+                        layer = omnivore.kml.parse(kmlText);
+                    }
+
+                } else {
+                    layer = omnivore.kml.parse(await file.text());
+                }
+
+                const key = "upload_" + Date.now() + file.name;
+                layerStore[key] = { layer: layer, marker: null };
+
+                const row = document.createElement("div");
+                row.className = "row";
+
+                const toggle = document.createElement("div");
+                toggle.className = "toggle active";
+
+                const label = document.createElement("span");
+                label.innerText = file.name;
+
+                row.append(toggle, label);
+                uploadList.appendChild(row);
+
+                toggle.onclick = () => {
+                    toggle.classList.toggle("active");
+                    if (toggle.classList.contains("active")) {
+                        layer.addTo(map);
+                        map.fitBounds(layer.getBounds());
+                    } else {
+                        map.removeLayer(layer);
+                    }
+                };
+
+                toggle.click();
+            }
+        });
+
+        function formatLabel(text) {
+            return text.replace(/_/g, " ");
+        }
+
+        function attachInteraction(layerItem, key, txtData, layer) {
+
+            let data = null;
+
+            if (txtData) {
+                try {
+                    // coba parse JSON dulu
+                    data = JSON.parse(txtData);
+                } catch (e) {
+
+                    // fallback: parsing manual format TXT bebas
+                    data = {};
+                    const lines = txtData.split("\n");
+
+                    lines.forEach(line => {
+                        line = line.trim();
+
+                        if (line.includes(":")) {
+                            const parts = line.split(":");
+
+                            const key = parts[0]
+                                .replace(/["{}]/g, "")
+                                .trim();
+
+                            const value = parts.slice(1).join(":")
+                                .replace(/["{}]/g, "")
+                                .trim();
+
+                            if (key) data[key] = value;
+                        }
+                    });
+
+                    console.log("TXT parsed manual:", data);
+                }
+            }
+
+            const fileName = key.split("/").pop();
+
+            let html = `
+<div style="
+    font-family:Arial;
+    width:260px;
+">
+
+    <!-- HEADER -->
+    <div style="
+        font-weight:bold;
+        font-size:14px;
+        margin-bottom:8px;
+        color:#2c7be5;
+    ">
+        ${fileName}
+    </div>
+
+    <!-- CONTENT -->
+    <div style="
+        max-height:180px;
+        overflow:auto;
+        border:1px solid #eee;
+        border-radius:6px;
+    ">
+
+    <table style="
+        width:100%;
+        border-collapse:collapse;
+        font-size:12px;
+    ">
+`;
+
+            let i = 0;
+
+            if (data) {
+                for (let k in data) {
+
+                    const bg = i % 2 === 0 ? "#ffffff" : "#f9f9f9";
+
+                    html += `
+        <tr style="background:${bg}">
+            <td style="
+                padding:6px;
+                font-weight:600;
+                white-space:nowrap;
+                width:45%;
+                color:#444;
+                border-bottom:1px solid #eee;
+            ">
+                ${formatLabel(k)}
+            </td>
+
+            <td style="
+                padding:6px;
+                color:#222;
+                border-bottom:1px solid #eee;
+            ">
+                ${data[k]}
+            </td>
+        </tr>
+        `;
+                    i++;
+                }
+            } else {
+                html += `
+    <tr>
+        <td style="padding:6px;color:#999">
+            Data tidak tersedia
+        </td>
+    </tr>`;
+            }
+
+            html += "</table>";
+            html += `
+    </table>
+    </div>
+
+    <!-- BUTTON -->
+    <div style="margin-top:10px;text-align:center;">
+        <button onclick="downloadAll('${key}')"
+        style="
+            background:#2c7be5;
+            color:white;
+            border:none;
+            padding:8px 12px;
+            border-radius:6px;
+            cursor:pointer;
+            width:100%;
+            font-weight:bold;
+        ">
+            ⬇ Download Data
+        </button>
+    </div>
+
+</div>
+`;
+
+            // --- GANTI POLYGON MENJADI MARKER ---
+            let targetForPopup = layerItem;
+
+            if (typeof layerItem.getBounds === 'function') {
+                const bounds = layerItem.getBounds();
+                if (bounds && bounds.isValid()) {
+                    // Sembunyikan polygon aslinya
+                    if (layerItem.setStyle) {
+                        layerItem.setStyle({ opacity: 0, fillOpacity: 0 });
+                        layerItem.options.interactive = false; // Matikan interaksi pada poligon
+                    }
+
+                    // Buat marker di tengahnya
+                    const center = bounds.getCenter();
+                    const icon = L.icon({
+                        iconUrl: 'img/marker-aoi.png',
+                        iconSize: [35, 45],
+                        iconAnchor: [17, 45],
+                        popupAnchor: [0, -40]
+                    });
+                    
+                    targetForPopup = L.marker(center, { icon: icon });
+                    
+                    if (layer) {
+                        layer.addLayer(targetForPopup); // Masukkan ke dalam grup layer agar ikut terhapus saat ditoggle
+                    } else {
+                        targetForPopup.addTo(map);
+                    }
+                }
+            }
+
+            targetForPopup.bindPopup(html, {
+                closeButton: false,
+                autoClose: false,
+                closeOnClick: false
+            });
+
+            // ===== HOVER =====
+            let isHover = false;
+            let popupHover = false;
+
+            targetForPopup.on("mouseover", function (e) {
+                isHover = true;
+                if (targetForPopup instanceof L.Marker) {
+                    this.openPopup();
+                } else {
+                    this.openPopup(e.latlng);
+                }
+            });
+
+            targetForPopup.on("mouseout", function () {
+                isHover = false;
+                setTimeout(() => {
+                    if (!isHover && !popupHover) {
+                        targetForPopup.closePopup();
+                    }
+                }, 200);
+            });
+
+            targetForPopup.on("popupopen", function () {
+                const el = targetForPopup.getPopup().getElement();
+
+                if (!el._binded) {
+                    el.addEventListener("mouseenter", () => popupHover = true);
+                    el.addEventListener("mouseleave", () => {
+                        popupHover = false;
+                        setTimeout(() => {
+                            if (!isHover && !popupHover) {
+                                targetForPopup.closePopup();
+                            }
+                        }, 200);
+                    });
+                    el._binded = true;
+                }
+            });
+
+            // ===== CLICK ZOOM =====
+            targetForPopup.on("click", function () {
+                const bounds = layerItem.getBounds ? layerItem.getBounds() : null;
+
+                if (bounds && bounds.isValid()) {
+                    map.flyToBounds(bounds, {
+                        padding: [50, 50],
+                        maxZoom: 16,
+                        duration: 1.2
+                    });
+                }
+            });
+        }
+
+        async function downloadAll(key) {
+
+            const fileUrl = layerStore[key].url;
+            const txtPath = key.replace(/\.(zip|kml|kmz)$/i, ".txt");
+            const txtUrl = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${txtPath}`;
+
+            // ===== DOWNLOAD FILE UTAMA =====
+            try {
+                const res1 = await fetch(fileUrl);
+                const blob1 = await res1.blob();
+
+                const a1 = document.createElement("a");
+                a1.href = URL.createObjectURL(blob1);
+                a1.download = fileUrl.split("/").pop();
+                document.body.appendChild(a1);
+                a1.click();
+                a1.remove();
+
+            } catch (e) {
+                console.error("Download file utama gagal:", e);
+            }
+
+            // ===== DOWNLOAD TXT =====
+            try {
+                const res2 = await fetch(txtUrl);
+
+                if (res2.ok) {
+                    const blob2 = await res2.blob();
+
+                    const a2 = document.createElement("a");
+                    a2.href = URL.createObjectURL(blob2);
+                    a2.download = txtPath.split("/").pop();
+                    document.body.appendChild(a2);
+                    a2.click();
+                    a2.remove();
+                } else {
+                    console.warn("TXT tidak ditemukan:", txtUrl);
+                }
+
+            } catch (e) {
+                console.error("Download TXT gagal:", e);
+            }
+        }
+        renderLegend();   // ✅ langsung tampil saat load
+        loadStructure();
+
+        // Memaksa Leaflet me-render ulang ukuran peta saat pertama kali dimunculkan di dalam portofolio
+        setTimeout(() => { map.invalidateSize(); }, 500);
+
+        // Logic Highlight Active Navbar Saat di Scroll
+        const sections = document.querySelectorAll('.landing-section');
+        const navLinks = document.querySelectorAll('.landing-nav .nav-links a');
+
+        const observerOptions = {
+            root: document.getElementById('landing-dashboard'),
+            threshold: 0.35 // Akan triger ketika section 35% ter-tampil (masuk) di layar
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const currentId = entry.target.getAttribute('id');
+                    navLinks.forEach(link => {
+                        link.classList.remove('active');
+                        // Highlight hanya untuk href yg matching (misal #beranda)
+                        if (link.getAttribute('href') === `#${currentId}`) {
+                            link.classList.add('active');
+                        }
+                    });
+                }
+            });
+        }, observerOptions);
+
+        sections.forEach(sec => observer.observe(sec));
+    </script>
+
+</body>
+
+</html>
